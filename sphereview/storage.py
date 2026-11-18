@@ -11,6 +11,7 @@ from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 
 from image_lab import validation as v
 from . import imaging
+from . import leveling
 from . import state
 
 MAX_ARCHIVE = 48 * 1024 * 1024
@@ -100,6 +101,22 @@ class Workspace:
             updated['revision'] += 1
             atomic_bytes(self.record_path(key), record_bytes(updated))
         return updated
+
+    def level(self, key, body):
+        """Try a vertical-edge level from the stored pose; save only when it converges."""
+        revision = v.revision(body)
+        edges = leveling.clean_edges(body.get('edges'))
+        with self.lock:
+            record = self.get(key)
+            if record['revision'] != revision:
+                raise v.Conflict('项目已更新，请重新载入后再修改')
+            report = leveling.solve(record['view'], record['pose'], edges)
+            if not report['applied']:
+                return {'report': report, 'project': record}
+            updated = state.apply_level(record, report)
+            updated['revision'] += 1
+            atomic_bytes(self.record_path(key), record_bytes(updated))
+        return {'report': report, 'project': updated}
 
     def source_bytes(self, project):
         digest = project['source']['sha256']

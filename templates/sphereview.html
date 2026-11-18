@@ -44,6 +44,9 @@
             </nav>
             <div id="primary-image" class="primary-image">
               <img id="hero" alt="当前全景预览">
+              <svg id="edge-layer" aria-hidden="true"></svg>
+              <div id="pick-surface" hidden
+                   aria-label="竖边点选层：点击一条本应竖直的边的两端"></div>
               <div id="cube-grid" class="cube-grid" hidden></div>
             </div>
             <div class="stage-footer">
@@ -57,6 +60,7 @@
               <img id="navigation-image" alt="从左到右为 −180° 至 180° 的校准全图">
               <span id="marker" aria-hidden="true"></span>
             </div>
+            <p id="map-level-state" class="map-level-state"></p>
             <div class="angles"><span>−180°</span> <span>−90°</span> <span>0°</span> <span>90°</span> <span>180°</span></div>
             <p id="probe-readout" class="readout">点击方向图转到指定位置并读取原图像素。</p>
           </section>
@@ -83,12 +87,23 @@
           </section>
           <section>
             <h3>全景姿态</h3>
+            <p id="leveling-record" class="leveling-record"></p>
             <form id="pose-form">
               <label>全站水平角 <input name="yaw" type="number" min="-180" max="180" step="any" required></label>
               <label>全站仰角 <input name="pitch" type="number" min="-85" max="85" step="any" required></label>
               <label>全站旋转角 <input name="roll" type="number" min="-180" max="180" step="any" required></label>
               <button type="submit">应用姿态</button>
             </form>
+          </section>
+          <section id="level-section">
+            <h3>按竖边扶正</h3>
+            <p class="hint">在透视取景里点一条本该竖直的边的两端，共 2–4 条、尽量朝向不同。点错了可重画或移除。</p>
+            <div class="level-actions">
+              <button type="button" id="level-pick" aria-pressed="false">点选竖边</button>
+              <button type="button" id="level-apply" disabled>按所选竖边扶正</button>
+            </div>
+            <ol id="edge-list" class="edge-list"></ol>
+            <div id="level-result" class="level-result"></div>
           </section>
           <section>
             <h3>曝光</h3>

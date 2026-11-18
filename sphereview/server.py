@@ -65,6 +65,11 @@ def register(app, root):
     def edit(key):
         return jsonify(workspace.edit(key, v.object_value(request.get_json(silent=True))))
 
+    @api.post('/projects/<key>/level')
+    def level(key):
+        body = v.object_value(request.get_json(silent=True))
+        return jsonify(workspace.level(key, body))
+
     @api.get('/projects/<key>/source.png')
     def source(key):
         return respond(workspace.source_bytes(workspace.get(key)), 'source.png', 'image/png',
