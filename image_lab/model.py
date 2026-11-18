@@ -79,6 +79,13 @@ def validate(project):
             v.sha(f['mask'])
     if project.get('reference') is not None and project['reference'] not in ids:
         raise v.Invalid('参考帧不存在')
+    pin = project['settings'].get('focus', {}).get('pin', {})
+    if pin.get('enabled'):
+        region_ids = {item.get('id') for item in project.get('regions', [])}
+        if pin.get('region_id') not in region_ids:
+            raise v.Invalid('参考锁定的检测区域不存在，请重新选择')
+        if pin.get('frame_id') not in ids:
+            raise v.Invalid('参考锁定的照片不存在，请重新选择')
     project['settings'] = all_settings(project.get('settings'))
     if project['settings']['size'] ** 2 * max(len(ids), 1) > 16000000:
         raise v.Invalid('超过1600万帧像素预算，请降低长边或减少照片')

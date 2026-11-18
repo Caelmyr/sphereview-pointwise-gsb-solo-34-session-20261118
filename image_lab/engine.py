@@ -30,6 +30,13 @@ def process(project, assets, progress=None, cancelled=None):
     if workflow.allow_flow:
         prepared = refine(prepared, settings['flow'], progress, cancelled)
     stages['local_registration'] = time.monotonic() - stage_started
+    if mode == 'focus' and settings['focus'].get('pin', {}).get('enabled'):
+        pin = settings['focus']['pin']
+        region = next((item for item in project.get('regions', []) if item.get('id') == pin['region_id']), None)
+        if region is None:
+            from .validation import Invalid
+            raise Invalid('参考锁定的检测区域已被删除，请重新选择检测区域或关闭锁定')
+        prepared['pin_region'] = region
     stage_started = time.monotonic()
     fields, report = run_workflow(workflow, prepared, settings, progress, cancelled)
     stages['compose'] = time.monotonic() - stage_started

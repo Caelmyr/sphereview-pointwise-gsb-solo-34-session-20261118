@@ -1,4 +1,5 @@
 import io
+import numpy as np
 from flask import Blueprint, request, jsonify, Response, send_file
 from . import validation as v
 from . import model
@@ -508,6 +509,56 @@ def create_api(services):
     @api.get('/projects/<key>/regions/<region_id>/frames')
     def region_frames(key, region_id):
         return jsonify(regions.across_frames(key, region_id))
+
+    @api.get('/projects/<key>/focus-pin/options')
+    def focus_pin_options(key):
+        project = store.get(key)
+        region_id = request.args.get('region_id')
+        if region_id:
+            v.identifier(region_id)
+        enabled = [{'frame_id': f['id'], 'name': f['name'], 'masked': bool(f.get('mask'))} for f in model.enabled_frames(project)]
+        target_region = next((r for r in project.get('regions', []) if r['id'] == region_id), None) if region_id else None
+        result = {'regions': project.get('regions', []), 'frames': enabled, 'pin': project['settings']['focus'].get('pin', {'enabled': False})}
+        if target_region is not None:
+            result['region_frames'] = regions.across_frames(key, target_region['id'])
+        return jsonify(result)
+
+    @api.post('/projects/<key>/focus-pin/preview')
+    def focus_pin_preview(key):
+        from .focus import focus_measure
+        from .focus_pin import preview_overlay
+        data = body()
+        project = store.get(key)
+        region_id = v.identifier(data.get('region_id'))
+        frame_id = v.identifier(data.get('frame_id'))
+        region = next((r for r in project.get('regions', []) if r.get('id') == region_id), None)
+        if region is None:
+            raise v.Invalid('检测区域不存在，请先在检测区域中建立区域')
+        pin = {'enabled': True, 'region_id': region_id, 'frame_id': frame_id,
+               'low_confidence': v.number(data.get('low_confidence', .35), '低把握阈值', .02, .98),
+               'spread': v.integer(data.get('spread', 8), '连通扩散半径', 0, 64)}
+        prepared = prepare(project, assets, True)
+        frame_index = next((i for i, f in enumerate(prepared['frames']) if f['id'] == frame_id), None)
+        if frame_index is None:
+            raise v.Invalid('指定照片未启用，请选择启用中的照片')
+        measures = np.stack([focus_measure(image, project['settings']['focus']['metric'], project['settings']['focus']['radius']) for image in prepared['images']])
+        measures *= np.stack(prepared['validities'])
+        ordered = np.sort(measures, axis=0)
+        confidence = ((ordered[-1] - ordered[-2]) / np.maximum(ordered[-1], 1e-8) if len(prepared['images']) > 1 else np.ones(measures.shape[1:], dtype=np.float32)).astype(np.float32)
+        overlay, masks = preview_overlay(prepared, confidence, pin, region)
+        stats = {
+            'frame_index': masks['frame_index'],
+            'seed_pixels': int(masks['seed'].sum()),
+            'spread_pixels': int(masks['spread'].sum()),
+            'pinned_pixels': int(masks['mask'].sum()),
+            'fallback_pixels': int(masks['fallback'].sum()),
+            'region_pixels': int(masks['region_raster'].sum()),
+            'fallback_fraction': float(masks['fallback'].sum() / max(masks['region_raster'].sum(), 1)),
+            'pinned_fraction': float(masks['mask'].mean()),
+        }
+        response = jsonify(stats)
+        response.headers['X-Pin-Stats'] = '%d' % stats['pinned_pixels']
+        return image_response(overlay) if data.get('image', True) else response
 
     @api.get('/projects/<key>/region-overlay')
     def region_overlay(key):

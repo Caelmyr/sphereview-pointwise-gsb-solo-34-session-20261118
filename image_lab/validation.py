@@ -160,6 +160,20 @@ def hdr_settings(body):
     }
 
 
+def focus_pin(body):
+    body = object_value(body, '景深参考锁定')
+    enabled = boolean(body.get('enabled', False), '启用参考锁定')
+    if not enabled:
+        return {'enabled': False, 'region_id': None, 'frame_id': None, 'low_confidence': .35, 'spread': 8}
+    return {
+        'enabled': True,
+        'region_id': identifier(body.get('region_id')),
+        'frame_id': identifier(body.get('frame_id')),
+        'low_confidence': number(body.get('low_confidence', .35), '低把握阈值', .02, .98),
+        'spread': integer(body.get('spread', 8), '连通扩散半径', 0, 64),
+    }
+
+
 def focus_settings(body):
     body = object_value(body, '景深设置')
     return {
@@ -169,6 +183,7 @@ def focus_settings(body):
         'levels': integer(body.get('levels', 5), '景深金字塔', 1, 8),
         'consistency': integer(body.get('consistency', 3), '索引中值窗口', 1, 15),
         'method': choice(body.get('method', 'pyramid'), '景深合成', ['pyramid', 'weighted', 'hard']),
+        'pin': focus_pin(body.get('pin', {})),
     }
 
 
