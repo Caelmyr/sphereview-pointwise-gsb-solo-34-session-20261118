@@ -15,6 +15,7 @@ let current = null;
 let mode = 'view';
 let busy = false;
 let navToken = '';
+let tourPlan = null;
 
 function route(key, product = '') {
     return '/sphere/projects/' + key + (product ? '/' + product : '');
@@ -111,6 +112,10 @@ function setProject(project) {
         $('seam-result').replaceChildren();
     }
     current = project;
+    if (tourPlan && tourPlan.signature !== bookmarkSignature()) {
+        tourPlan = null;
+        $('status').textContent = '书签已变化，请重新生成巡看清单';
+    }
     $('workspace').hidden = false;
     $('empty').hidden = true;
     $('project-name').textContent = project.name;
@@ -135,6 +140,7 @@ function setProject(project) {
     $('marker').style.top = (90 - project.view.pitch) / 1.8 + '%';
     $('marker-position').textContent = project.view.yaw.toFixed(1) + '° / ' + project.view.pitch.toFixed(1) + '°';
     populateBookmarks();
+    renderTour();
     showMode();
 }
 
@@ -143,9 +149,124 @@ async function edit(action, values) {
     setProject(data);
 }
 
+function bookmarkSignature() {
+    return JSON.stringify([current.id, current.bookmarks.map(item => [item.id, item.view])]);
+}
+
+function formatArc(row) {
+    if (row.width >= 360) return '整圈 360°';
+    return row.crosses_seam
+        ? `${row.start.toFixed(1)}° → ${row.end.toFixed(1)}°（跨 ±180°）`
+        : `${row.start.toFixed(1)}° 至 ${row.end.toFixed(1)}°`;
+}
+
+function arcPieces(row) {
+    // Screen pieces in percent of the direction map, splitting arcs that wrap
+    // across the -180/180 edge into a left and a right piece.
+    const percent = degrees => degrees / 3.6;
+    const start = row.start;
+    const stop = start + row.width;
+    if (stop <= 180) return [[(start + 180) / 3.6, percent(row.width)]];
+    if (start >= 180) return [[(start - 180) / 3.6, percent(row.width)]];
+    return [
+        [(start + 180) / 3.6, percent(180 - start)],
+        [0, percent(stop - 180)]
+    ];
+}
+
+function renderTour() {
+    if (!tourPlan) {
+        $('tour-result').hidden = true;
+        $('tour-result').replaceChildren();
+        $('tour-overlay').replaceChildren();
+        $('tour-legend').hidden = true;
+        return;
+    }
+    const plan = tourPlan;
+    const overlay = document.createElement('div');
+    overlay.className = 'tour-overlay';
+    for (const [kind, rows] of plan.bookmark_count ? [['covered', plan.covered], ['gap', plan.gaps]] : []) {
+        for (const row of rows) {
+            for (const [left, width] of arcPieces(row)) {
+                const band = document.createElement('span');
+                band.className = 'tour-band ' + kind;
+                band.style.left = left + '%';
+                band.style.width = width + '%';
+                overlay.append(band);
+            }
+        }
+    }
+    $('tour-overlay').replaceChildren(overlay);
+    $('tour-legend').hidden = false;
+
+    const covered = document.createElement('p');
+    covered.className = 'tour-summary';
+    if (!plan.bookmark_count) {
+        covered.textContent = '还没有取景书签，先在下方保存几张再生成巡看清单。';
+        $('tour-result').replaceChildren(covered);
+        $('tour-result').hidden = false;
+        return;
+    }
+    covered.textContent = `已覆盖 ${plan.coverage_degrees.toFixed(1)}°（${(plan.coverage_fraction * 100).toFixed(1)}%），` +
+        `未覆盖 ${plan.uncovered_degrees.toFixed(1)}°，${plan.gap_count} 段空档，最长 ${plan.longest_gap_degrees.toFixed(1)}°。`;
+    const list = document.createElement('ol');
+    list.className = 'tour-list';
+    for (const item of plan.selected) {
+        const row = document.createElement('li');
+        const recall = document.createElement('button');
+        recall.type = 'button';
+        recall.textContent = item.name;
+        recall.title = '切换到这张取景';
+        recall.addEventListener('click', run(async () => {
+            mode = 'view';
+            await edit('recall', {bookmark: item.id});
+        }));
+        const span = document.createElement('span');
+        span.textContent = item.width > 0
+            ? `${item.width.toFixed(1)}° 经度`
+            : '赤道不可见';
+        row.append(recall, span);
+        list.append(row);
+    }
+    const ranges = document.createElement('p');
+    ranges.className = 'tour-ranges';
+    ranges.textContent = plan.covered.length
+        ? '覆盖经度：' + plan.covered.map(formatArc).join('；')
+        : '覆盖经度：无';
+    const gaps = document.createElement('p');
+    gaps.className = 'tour-ranges';
+    gaps.textContent = plan.gaps.length
+        ? '未覆盖：' + plan.gaps.map(formatArc).join('；')
+        : '未覆盖：无，整圈都有取景';
+    $('tour-result').replaceChildren(covered, list, ranges, gaps);
+    $('tour-result').hidden = false;
+}
+
+function runTour() {
+    return run(async () => {
+        const limit = Number($('tour-limit').value);
+        if (!Number.isInteger(limit) || limit < 1 || limit > 12) {
+            throw new Error('巡看张数上限需为 1 至 12 的整数');
+        }
+        tourPlan = {...await json(route(current.id, 'tour') + '?limit=' + limit),
+            signature: bookmarkSignature()};
+        populateBookmarks();
+        renderTour();
+    })();
+}
+
 function populateBookmarks() {
+    const order = new Map((tourPlan?.selected_ids || []).map((id, index) => [id, index + 1]));
     const cards = current.bookmarks.map(item => {
         const card = document.createElement('article');
+        const rank = order.get(item.id);
+        if (rank) {
+            card.classList.add('tour-pick');
+            const badge = document.createElement('span');
+            badge.className = 'tour-badge';
+            badge.textContent = String(rank);
+            card.append(badge);
+        }
         const image = document.createElement('img');
         image.alt = item.name + '的取景';
         image.loading = 'lazy';
@@ -214,6 +335,7 @@ $('bookmark-form').addEventListener('submit', run(async () => {
     await edit('bookmark', {name: $('bookmark-name').value});
     $('bookmark-name').value = '';
 }));
+$('tour-run').addEventListener('click', () => runTour());
 $('rename-form').addEventListener('submit', run(async () => {
     await edit('name', {name: $('new-name').value});
     await projectList();

@@ -55,9 +55,11 @@
             <div class="section-title"><h3>方向图</h3><span id="marker-position"></span></div>
             <div id="direction-map">
               <img id="navigation-image" alt="从左到右为 −180° 至 180° 的校准全图">
+              <div id="tour-overlay" aria-hidden="true"></div>
               <span id="marker" aria-hidden="true"></span>
             </div>
             <div class="angles"><span>−180°</span> <span>−90°</span> <span>0°</span> <span>90°</span> <span>180°</span></div>
+            <p id="tour-legend" class="readout" hidden><span class="tour-key covered"></span>巡看覆盖 <span class="tour-key gap"></span>未覆盖</p>
             <p id="probe-readout" class="readout">点击方向图转到指定位置并读取原图像素。</p>
           </section>
           <section class="bookmarks">
@@ -67,6 +69,11 @@
               <button type="submit">保存当前取景</button>
             </form>
             <div id="bookmark-list"></div>
+            <div class="tour-controls">
+              <label>巡看张数上限 <input id="tour-limit" type="number" min="1" max="12" step="1" value="4"></label>
+              <button id="tour-run" type="button">生成巡看清单</button>
+            </div>
+            <div id="tour-result" hidden></div>
           </section>
         </div>
         <aside class="inspector">

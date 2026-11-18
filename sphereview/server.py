@@ -3,7 +3,7 @@ import io
 from flask import Blueprint, jsonify, render_template, request, send_file
 
 from image_lab import validation as v
-from . import imaging, projection, state
+from . import imaging, projection, state, tour
 from .storage import MAX_ARCHIVE, Workspace, archive_bytes, record_bytes
 
 
@@ -119,6 +119,12 @@ def register(app, root):
         snapshot = state.find_bookmark(project, bookmark)
         return png_response(projection.view_image(workspace.source(project), snapshot['view'],
                             project['pose'], project['exposure'], 256), 'bookmark.png')
+
+    @api.get('/projects/<key>/tour')
+    def tour_plan(key):
+        project = workspace.get(key)
+        limit = v.integer(request.args.get('limit', 4), '张数上限', 1, 12)
+        return jsonify(tour.plan(project['bookmarks'], limit))
 
     @api.get('/projects/<key>/probe')
     def probe(key):
