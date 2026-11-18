@@ -56,6 +56,7 @@
             <div id="direction-map">
               <img id="navigation-image" alt="从左到右为 −180° 至 180° 的校准全图">
               <span id="marker" aria-hidden="true"></span>
+              <span id="poi-marker" hidden aria-hidden="true"></span>
             </div>
             <div class="angles"><span>−180°</span> <span>−90°</span> <span>0°</span> <span>90°</span> <span>180°</span></div>
             <p id="probe-readout" class="readout">点击方向图转到指定位置并读取原图像素。</p>
@@ -67,6 +68,20 @@
               <button type="submit">保存当前取景</button>
             </form>
             <div id="bookmark-list"></div>
+          </section>
+          <section class="tour">
+            <div class="section-title"><h3>全景导览</h3><span id="tour-hint"></span></div>
+            <div class="tour-controls">
+              <label>起点书签<select id="tour-from"></select></label>
+              <label>终点书签<select id="tour-to"></select></label>
+              <button id="tour-pick" type="button" aria-pressed="false">点选入口位置</button>
+              <button id="tour-make" type="button" class="accent">生成导览 GIF</button>
+            </div>
+            <p id="tour-poi" class="readout">在方向图上点选一个两个取景都拍得到的入口；镜头会真实转过去，经过左右接缝时走最近方向，入口尽量保持在画面内。</p>
+            <div id="tour-result" hidden>
+              <img id="tour-preview" alt="两张书签之间的导览动画">
+              <a id="tour-download" class="action accent">下载 GIF ↓</a>
+            </div>
           </section>
         </div>
         <aside class="inspector">

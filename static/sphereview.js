@@ -15,6 +15,10 @@ let current = null;
 let mode = 'view';
 let busy = false;
 let navToken = '';
+let poi = null;
+let picking = false;
+let tourObjectUrl = null;
+const TOUR_DEFAULT_HINT = '在方向图上点选一个两个取景都拍得到的入口；镜头会真实转过去，经过左右接缝时走最近方向，入口尽量保持在画面内。';
 
 function route(key, product = '') {
     return '/sphere/projects/' + key + (product ? '/' + product : '');
@@ -105,10 +109,31 @@ async function projectList() {
     }));
 }
 
+function setPicking(active) {
+    picking = active;
+    $('tour-pick').setAttribute('aria-pressed', String(active));
+    $('tour-pick').textContent = active ? '在方向图上点击入口…' : '点选入口位置';
+    $('direction-map').classList.toggle('picking', active);
+}
+
+function resetTour() {
+    poi = null;
+    setPicking(false);
+    $('poi-marker').hidden = true;
+    $('tour-result').hidden = true;
+    $('tour-hint').textContent = '';
+    $('tour-poi').textContent = TOUR_DEFAULT_HINT;
+    if (tourObjectUrl) {
+        URL.revokeObjectURL(tourObjectUrl);
+        tourObjectUrl = null;
+    }
+}
+
 function setProject(project) {
     if (current?.id !== project.id) {
         $('probe-readout').textContent = '点击方向图转到指定位置并读取原图像素。';
         $('seam-result').replaceChildren();
+        resetTour();
     }
     current = project;
     $('workspace').hidden = false;
@@ -167,6 +192,20 @@ function populateBookmarks() {
         return card;
     });
     $('bookmark-list').replaceChildren(...cards);
+    const selects = [$('tour-from'), $('tour-to')];
+    const previous = selects.map(select => select.value);
+    for (const [index, select] of selects.entries()) {
+        select.replaceChildren(...current.bookmarks.map(item => {
+            const option = document.createElement('option');
+            option.value = item.id;
+            option.textContent = item.name;
+            return option;
+        }));
+        select.value = previous[index];
+    }
+    if (current.bookmarks.length && $('tour-from').selectedIndex < 0) $('tour-from').selectedIndex = 0;
+    if (current.bookmarks.length > 1 && $('tour-to').selectedIndex < 0) $('tour-to').selectedIndex = 1;
+    $('tour-make').disabled = current.bookmarks.length < 2;
 }
 
 function bindUpload(open, input, path) {
@@ -223,12 +262,51 @@ $('direction-map').addEventListener('click', run(async event => {
     const box = $('direction-map').getBoundingClientRect();
     const yaw = +(((event.clientX - box.left) / box.width) * 360 - 180).toFixed(2);
     const pitch = Math.min(89.5, Math.max(-89.5, +(90 - ((event.clientY - box.top) / box.height) * 180).toFixed(2)));
+    if (picking) {
+        setPicking(false);
+        poi = {yaw, pitch};
+        const marker = $('poi-marker');
+        marker.hidden = false;
+        marker.style.left = (yaw + 180) / 3.6 + '%';
+        marker.style.top = (90 - pitch) / 1.8 + '%';
+        $('tour-poi').textContent = '入口：水平角 ' + yaw.toFixed(1) + '° · 仰角 ' + pitch.toFixed(1) +
+            '°。生成时镜头会尽量把它保持在画面内。';
+        return;
+    }
     mode = 'view';
     await edit('view', {view: {...current.view, yaw, pitch}});
     const search = new URLSearchParams({yaw, pitch});
     const probe = await json(route(current.id, 'probe') + '?' + search);
     $('probe-readout').textContent = '原图像素 (' + probe.column + ', ' + probe.row +
         ')  ·  RGBA ' + probe.rgba.join(', ');
+}));
+
+$('tour-pick').addEventListener('click', () => setPicking(!picking));
+
+$('tour-make').addEventListener('click', run(async () => {
+    if (current.bookmarks.length < 2) throw new Error('至少需要两张取景书签');
+    const from = $('tour-from').value;
+    const to = $('tour-to').value;
+    if (!from || !to) throw new Error('请选择起点和终点书签');
+    if (from === to) throw new Error('起点和终点不能是同一张书签');
+    if (!poi) throw new Error('请先在方向图上点选入口位置');
+    const query = new URLSearchParams({from, to, yaw: poi.yaw, pitch: poi.pitch});
+    $('tour-hint').textContent = '正在生成约 4 秒的导览…';
+    try {
+        const response = await fetch(route(current.id, 'tour.gif') + '?' + query);
+        if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            throw new Error(body.error || '生成失败');
+        }
+        const blob = await response.blob();
+        if (tourObjectUrl) URL.revokeObjectURL(tourObjectUrl);
+        tourObjectUrl = URL.createObjectURL(blob);
+        $('tour-preview').src = tourObjectUrl;
+        $('tour-download').href = route(current.id, 'tour.gif') + '?' + query + '&download=1';
+        $('tour-result').hidden = false;
+    } finally {
+        $('tour-hint').textContent = '';
+    }
 }));
 
 $('seam').addEventListener('click', run(async () => {

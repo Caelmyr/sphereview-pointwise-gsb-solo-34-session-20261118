@@ -3,7 +3,7 @@ import io
 from flask import Blueprint, jsonify, render_template, request, send_file
 
 from image_lab import validation as v
-from . import imaging, projection, state
+from . import imaging, projection, state, tour
 from .storage import MAX_ARCHIVE, Workspace, archive_bytes, record_bytes
 
 
@@ -119,6 +119,18 @@ def register(app, root):
         snapshot = state.find_bookmark(project, bookmark)
         return png_response(projection.view_image(workspace.source(project), snapshot['view'],
                             project['pose'], project['exposure'], 256), 'bookmark.png')
+
+    @api.get('/projects/<key>/tour.gif')
+    def tour_gif(key):
+        project = workspace.get(key)
+        start = state.find_bookmark(project, request.args.get('from'))
+        stop = state.find_bookmark(project, request.args.get('to'))
+        if start['id'] == stop['id']:
+            raise v.Invalid('起点和终点不能是同一张书签')
+        yaw = v.number(request.args.get('yaw'), '入口水平角', -180, 180)
+        pitch = v.number(request.args.get('pitch'), '入口仰角', -90, 90)
+        data = tour.render_gif(workspace.source(project), project, start, stop, yaw, pitch)
+        return respond(data, 'tour.gif', 'image/gif', request.args.get('download') == '1')
 
     @api.get('/projects/<key>/probe')
     def probe(key):
